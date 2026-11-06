@@ -1,0 +1,26 @@
+# dados (licença do VeRi proíbe redistribuir)
+data/
+*.zip
+
+# treino
+checkpoints/
+runs/
+outputs/
+*.pt
+*.pth
+*.safetensors
+wandb/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+
+# sistema / editor
+.DS_Store
+.vscode/
+.idea/
