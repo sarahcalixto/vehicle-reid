@@ -1,11 +1,11 @@
 # dados (licença do VeRi proíbe redistribuir)
-data/
+/data/
 *.zip
 
 # treino
-checkpoints/
-runs/
-outputs/
+/checkpoints/
+/runs/
+/outputs/
 *.pt
 *.pth
 *.safetensors
@@ -24,3 +24,6 @@ venv/
 .DS_Store
 .vscode/
 .idea/
+
+# material pessoal (plano, PDFs)
+/docs/
