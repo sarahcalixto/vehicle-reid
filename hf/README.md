@@ -27,7 +27,7 @@ Reimplementado do zero, em PyTorch, seguindo o *strong baseline* de
 
 | mAP | Rank-1 | Rank-5 | Rank-10 |
 |---|---|---|---|
-| X% | X% | X% | X% |
+| 76,6% | 95,1% | 98,1% | 98,7% |
 
 Protocolo do VeRi: 1.678 queries contra 11.579 imagens de galeria, 200 veículos que o modelo nunca viu
 no treino. Imagens do mesmo veículo **na mesma câmera** da query são descartadas da galeria.
@@ -60,7 +60,7 @@ imagem 256x256 -> ResNet50 (ImageNet, last stride = 1) -> GAP -> feature [2048]
 | Otimizador | Adam, lr 3,5e-4, weight decay 5e-4 |
 | Agenda | warmup linear de 10 épocas (3,5e-5 -> 3,5e-4), x0,1 nas épocas 30 e 50, 60 épocas |
 | Precisão | mixed precision (autocast float16 + GradScaler) |
-| Hardware | 1x RTX 4050 notebook (6 GB), ~X h |
+| Hardware | 1x RTX 4050 notebook (6 GB), ~3,9 h |
 
 Diferença em relação ao artigo: 60 épocas em vez de 120 (degraus 30/50 em vez de 40/70), por limite de tempo.
 Center loss não foi usada.
