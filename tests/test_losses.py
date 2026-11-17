@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 
 from reid.losses.ce_ls import CrossEntropyLabelSmooth
+from reid.losses.center import CenterLoss
 from reid.losses.triplet import TripletLoss, pairwise_distance
 
 
@@ -29,3 +30,13 @@ def test_label_smoothing_com_eps_zero_e_cross_entropy_comum():
     targets = torch.tensor([0, 3, 9, 3])
     loss = CrossEntropyLabelSmooth(num_classes=10, eps=0.0)(logits, targets)
     assert torch.allclose(loss, F.cross_entropy(logits, targets), atol=1e-5)
+
+
+def test_center_loss_calculada_a_mao():
+    loss_fn = CenterLoss(num_classes=2, feat_dim=2)
+    with torch.no_grad():
+        loss_fn.centers.copy_(torch.tensor([[0., 0.], [3., 0.]]))
+    feats = torch.tensor([[0., 0.], [1., 1.], [3., 2.]])
+    labels = torch.tensor([0, 0, 1])
+    # distâncias ao quadrado até o centro do próprio veículo: 0, 2, 4 -> média 2
+    assert torch.allclose(loss_fn(feats, labels), torch.tensor(2.0))
