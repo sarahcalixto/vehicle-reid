@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from reid.data.dataset import VeRiDataset
 from reid.data.transforms import build_transforms
 from reid.eval.metrics import evaluate_rank
+from reid.eval.rerank import re_ranking
 from reid.models.baseline import Baseline
 
 
@@ -35,8 +36,10 @@ def main():
     parser.add_argument("--checkpoint", default="checkpoints/last.pt")
     parser.add_argument("--data", default="data/VeRi")
     parser.add_argument("--flip", action="store_true")
+    parser.add_argument("--rerank", action="store_true", help="mostra também o resultado com re-ranking")
+    parser.add_argument("--device", default="cuda", help="cpu se a GPU estiver ocupada com um treino")
     args = parser.parse_args()
-    device = "cuda"
+    device = args.device
 
     ckpt = torch.load(args.checkpoint, map_location=device)
     model = Baseline(ckpt["num_classes"], pretrained=False).to(device)
@@ -49,12 +52,15 @@ def main():
     # normalizar e usar distância euclidiana equivale a ordenar por similaridade de cosseno
     q_feats = F.normalize(q_feats, dim=1)
     g_feats = F.normalize(g_feats, dim=1)
-    distmat = torch.cdist(q_feats, g_feats)          # [Q, G]
+    distmats = {"original": torch.cdist(q_feats, g_feats).numpy()}   # [Q, G]
+    if args.rerank:
+        distmats["re-ranking"] = re_ranking(q_feats, g_feats)
 
-    mAP, cmc = evaluate_rank(distmat.numpy(), q_ids.numpy(), g_ids.numpy(),
-                             q_cams.numpy(), g_cams.numpy())
-    print(f"época {ckpt['epoch'] + 1}  mAP {mAP:.1%}  Rank-1 {cmc[0]:.1%}  "
-          f"Rank-5 {cmc[4]:.1%}  Rank-10 {cmc[9]:.1%}")
+    for name, distmat in distmats.items():
+        mAP, cmc = evaluate_rank(distmat, q_ids.numpy(), g_ids.numpy(),
+                                 q_cams.numpy(), g_cams.numpy())
+        print(f"época {ckpt['epoch'] + 1}  {name}  mAP {mAP:.1%}  Rank-1 {cmc[0]:.1%}  "
+              f"Rank-5 {cmc[4]:.1%}  Rank-10 {cmc[9]:.1%}")
 
 
 if __name__ == "__main__":
