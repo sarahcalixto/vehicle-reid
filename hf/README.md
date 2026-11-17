@@ -25,9 +25,24 @@ Reimplementado do zero, em PyTorch, seguindo o *strong baseline* de
 
 ## Resultados (VeRi-776, test set)
 
-| mAP | Rank-1 | Rank-5 | Rank-10 |
-|---|---|---|---|
-| 76,6% | 95,1% | 98,1% | 98,7% |
+| | mAP | Rank-1 | Rank-5 | Rank-10 |
+|---|---|---|---|---|
+| Este modelo | 78,3% | 96,0% | 98,2% | 99,0% |
+| Este modelo + re-ranking | 80,6% | 96,5% | 97,6% | 98,5% |
+
+Re-ranking: k-reciprocal ([Zhong et al., 2017](https://arxiv.org/abs/1701.08398)), k1 = 20, k2 = 6, lambda = 0,3.
+É um pós-processamento da lista de busca: não muda o modelo, só a ordem da galeria.
+
+Evolução (mesmo protocolo de teste):
+
+| Versão | mAP | Rank-1 |
+|---|---|---|
+| Baseline, 60 épocas | 76,6% | 95,1% |
+| Baseline, 60 épocas + re-ranking | 78,5% | 95,2% |
+| + center loss, 120 épocas (este modelo) | 78,3% | 96,0% |
+| + center loss, 120 épocas + re-ranking | 80,6% | 96,5% |
+
+A center loss e as 120 épocas entraram no mesmo treino, então o ganho de +1,7 de mAP não separa o efeito de cada uma.
 
 Protocolo do VeRi: 1.678 queries contra 11.579 imagens de galeria, 200 veículos que o modelo nunca viu
 no treino. Imagens do mesmo veículo **na mesma câmera** da query são descartadas da galeria.
@@ -38,7 +53,7 @@ features normalizadas (equivalente a cosseno).
 
 ```
 imagem 256x256 -> ResNet50 (ImageNet, last stride = 1) -> GAP -> feature [2048]
-                                                                   |-> triplet loss (batch-hard)
+                                                                   |-> triplet loss (batch-hard) + center loss
                                                                    v
                                                         BatchNorm1d (BNNeck)
                                                                    |-> feature de inferência
@@ -48,7 +63,8 @@ imagem 256x256 -> ResNet50 (ImageNet, last stride = 1) -> GAP -> feature [2048]
 
 - **Last stride = 1:** o último estágio da ResNet não reduz a resolução (mapa 16x16 em vez de 8x8).
 - **BNNeck:** a triplet usa a feature antes da BN; a cross-entropy usa a de depois. Na inferência, a de depois.
-- **Losses:** triplet batch-hard (margem 0,3) + cross-entropy com label smoothing (eps = 0,1).
+- **Losses:** triplet batch-hard (margem 0,3) + cross-entropy com label smoothing (eps = 0,1) +
+  center loss (peso 0,0005; centros com SGD próprio, lr 0,5).
 
 ## Treino
 
@@ -58,12 +74,11 @@ imagem 256x256 -> ResNet50 (ImageNet, last stride = 1) -> GAP -> feature [2048]
 | Batch | P x K = 16 veículos x 4 imagens |
 | Augmentation | resize 256x256, flip horizontal, pad 10 + random crop, random erasing (p = 0,5) |
 | Otimizador | Adam, lr 3,5e-4, weight decay 5e-4 |
-| Agenda | warmup linear de 10 épocas (3,5e-5 -> 3,5e-4), x0,1 nas épocas 30 e 50, 60 épocas |
+| Agenda | warmup linear de 10 épocas (3,5e-5 -> 3,5e-4), x0,1 nas épocas 40 e 70, 120 épocas |
 | Precisão | mixed precision (autocast float16 + GradScaler) |
-| Hardware | 1x RTX 4050 notebook (6 GB), ~3,9 h |
+| Hardware | 1x RTX 4050 notebook (6 GB), ~8,8 h |
 
-Diferença em relação ao artigo: 60 épocas em vez de 120 (degraus 30/50 em vez de 40/70), por limite de tempo.
-Center loss não foi usada.
+Mesma receita do artigo (seção 3), incluindo a center loss e a agenda de 120 épocas.
 
 ## Como usar
 
@@ -104,6 +119,20 @@ with torch.no_grad():
   author    = {Luo, Hao and Gu, Youzhi and Liao, Xingyu and Lai, Shenqi and Jiang, Wei},
   booktitle = {CVPR Workshops},
   year      = {2019}
+}
+
+@inproceedings{wen2016discriminative,
+  title     = {A Discriminative Feature Learning Approach for Deep Face Recognition},
+  author    = {Wen, Yandong and Zhang, Kaipeng and Li, Zhifeng and Qiao, Yu},
+  booktitle = {ECCV},
+  year      = {2016}
+}
+
+@inproceedings{zhong2017reranking,
+  title     = {Re-ranking Person Re-identification with k-reciprocal Encoding},
+  author    = {Zhong, Zhun and Zheng, Liang and Cao, Donglin and Li, Shaozi},
+  booktitle = {CVPR},
+  year      = {2017}
 }
 
 @inproceedings{liu2016deep,
