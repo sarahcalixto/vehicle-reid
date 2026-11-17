@@ -9,6 +9,7 @@ from reid.data.dataset import VeRiDataset
 from reid.data.sampler import PKSampler
 from reid.data.transforms import build_transforms
 from reid.losses.ce_ls import CrossEntropyLabelSmooth
+from reid.losses.center import CenterLoss
 from reid.losses.triplet import TripletLoss
 from reid.models.baseline import Baseline
 
@@ -30,7 +31,13 @@ def parse_args():
     parser.add_argument("--max-iters", type=int, default=0,
                         help="para depois de N iterações (teste de memória)")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--center", action="store_true", help="adiciona a center loss (artigo, seção 3.6)")
     return parser.parse_args()
+
+
+# artigo: peso beta da center loss e lr do otimizador SGD dos centros
+CENTER_WEIGHT = 0.0005
+CENTER_LR = 0.5
 
 
 def lr_factor(epoch, warmup, steps):
@@ -78,6 +85,12 @@ def main():
     # não virarem zero em float16 (underflow).
     scaler = torch.amp.GradScaler("cuda")
 
+    center_loss, center_optimizer = None, None
+    if args.center:
+        center_loss = CenterLoss(num_classes).to(device)
+        # os centros têm otimizador próprio (SGD, lr 0.5), separado da rede
+        center_optimizer = torch.optim.SGD(center_loss.parameters(), lr=CENTER_LR)
+
     start_epoch = 0
     last_path = os.path.join(args.out, "last.pt")
     if args.resume and os.path.exists(last_path):
@@ -86,6 +99,9 @@ def main():
         optimizer.load_state_dict(ckpt["optimizer"])
         scheduler.load_state_dict(ckpt["scheduler"])
         scaler.load_state_dict(ckpt["scaler"])
+        if args.center:
+            center_loss.load_state_dict(ckpt["center"])
+            center_optimizer.load_state_dict(ckpt["center_optimizer"])
         start_epoch = ckpt["epoch"] + 1
         print(f"retomando da época {start_epoch}")
 
@@ -103,10 +119,19 @@ def main():
             with torch.autocast("cuda", dtype=torch.float16):
                 logits, feats = model(images)
             loss = ce_loss(logits, vehicle_ids) + triplet_loss(feats, vehicle_ids)
+            if args.center:
+                loss = loss + CENTER_WEIGHT * center_loss(feats, vehicle_ids)
+                center_optimizer.zero_grad(set_to_none=True)
 
             optimizer.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
+            if args.center:
+                # o peso 0.0005 serve para a REDE não ser dominada pela center loss;
+                # os centros devem andar com o gradiente cheio, então desfaz o peso neles
+                scaler.unscale_(center_optimizer)
+                center_loss.centers.grad *= 1 / CENTER_WEIGHT
+                scaler.step(center_optimizer)
             scaler.update()
 
             sum_loss += loss.item()
@@ -123,9 +148,13 @@ def main():
               f"lr {optimizer.param_groups[0]['lr']:.2e}  {time.time() - t0:.0f}s", flush=True)
 
         # checkpoint a cada época, para retomar com --resume se travar
-        torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(),
-                    "scheduler": scheduler.state_dict(), "scaler": scaler.state_dict(),
-                    "epoch": epoch, "num_classes": num_classes}, last_path)
+        ckpt = {"model": model.state_dict(), "optimizer": optimizer.state_dict(),
+                "scheduler": scheduler.state_dict(), "scaler": scaler.state_dict(),
+                "epoch": epoch, "num_classes": num_classes}
+        if args.center:
+            ckpt["center"] = center_loss.state_dict()
+            ckpt["center_optimizer"] = center_optimizer.state_dict()
+        torch.save(ckpt, last_path)
 
 
 if __name__ == "__main__":
