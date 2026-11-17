@@ -9,7 +9,9 @@ from reid.losses.triplet import TripletLoss, pairwise_distance
 
 
 def test_pairwise_distance_bate_com_cdist():
-    x = torch.randn(8, 16)
+    # float64: em float32 a diagonal (distância 0) vira sqrt(resíduo numérico) ~ 1e-3,
+    # o que é irrelevante no treino mas reprova o teste. Aqui o teste confere a fórmula.
+    x = torch.randn(8, 16, dtype=torch.float64)
     assert torch.allclose(pairwise_distance(x), torch.cdist(x, x), atol=1e-4)
 
 
